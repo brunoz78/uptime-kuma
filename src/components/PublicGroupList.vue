@@ -74,7 +74,12 @@
                                                     v-if="showOnlyLastHeartbeat"
                                                     :status="statusOfLastHeartbeat(monitor.element.id)"
                                                 />
-                                                <Uptime v-else :monitor="monitor.element" type="24" :pill="true" />
+                                                <Uptime
+                                                    v-else
+                                                    :monitor="monitor.element"
+                                                    :type="dailyViewDays > 0 ? 'daily' : '24'"
+                                                    :pill="true"
+                                                />
                                                 <a
                                                     v-if="showLink(monitor)"
                                                     :href="monitor.element.url"
@@ -116,7 +121,12 @@
                                             </div>
                                         </div>
                                         <div :key="$root.userHeartbeatBar" class="col-3 col-xl-6">
-                                            <HeartbeatBar size="mid" :monitor-id="monitor.element.id" />
+                                            <DailyHeartbeatBar
+                                                v-if="dailyViewDays > 0"
+                                                :monitor-id="monitor.element.id"
+                                                :days="dailyViewDays"
+                                            />
+                                            <HeartbeatBar v-else size="mid" :monitor-id="monitor.element.id" />
                                         </div>
                                     </div>
                                 </div>
@@ -134,6 +144,7 @@
 import MonitorSettingDialog from "./MonitorSettingDialog.vue";
 import Draggable from "vuedraggable";
 import HeartbeatBar from "./HeartbeatBar.vue";
+import DailyHeartbeatBar from "./DailyHeartbeatBar.vue";
 import Uptime from "./Uptime.vue";
 import Tag from "./Tag.vue";
 import Status from "./Status.vue";
@@ -143,6 +154,7 @@ export default {
         MonitorSettingDialog,
         Draggable,
         HeartbeatBar,
+        DailyHeartbeatBar,
         Uptime,
         Tag,
         Status,
@@ -164,6 +176,11 @@ export default {
         /** Should only the last heartbeat be shown? */
         showOnlyLastHeartbeat: {
             type: Boolean,
+        },
+        /** Number of days of the daily view, 0 = regular heartbeat bar */
+        dailyViewDays: {
+            type: Number,
+            default: 0,
         },
     },
     data() {

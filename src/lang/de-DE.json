@@ -1610,5 +1610,14 @@
     "maxUseTemplateDescription": "Wenn diese Option aktiviert ist, wird die Nachricht anhand einer benutzerdefinierten Vorlage versendet.",
     "API Version": "API-Version",
     "Peer ID": "Peer-ID",
-    "wxPusherDownloadApp": "App herunterladen"
+    "wxPusherDownloadApp": "App herunterladen",
+    "dailyView": "Tagesansicht",
+    "dailyViewDescription": "Zeigt einen Balken pro Tag statt der letzten Heartbeats. Ein Tag entspricht einem UTC-Tag.",
+    "dailyViewOff": "Aus",
+    "dailyViewDays": "{0} Tage",
+    "dailyViewToday": "heute",
+    "dailyViewNoData": "Keine Daten",
+    "dailyViewPartial": "Teilweise gestört",
+    "dailyViewUptime": "Verfügbarkeit: {0} %",
+    "dailyViewAvgPing": "Ø Antwortzeit: {0} ms"
 }

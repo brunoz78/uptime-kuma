@@ -8,6 +8,7 @@ const { marked } = require("marked");
 const { Feed } = require("feed");
 const config = require("../config");
 const dayjs = require("dayjs");
+const { normalizeDailyViewDays } = require("../daily-view");
 
 const { setting } = require("../util-server");
 const {
@@ -455,6 +456,7 @@ class StatusPage extends BeanModel {
             analyticsType: this.analytics_type,
             showCertificateExpiry: !!this.show_certificate_expiry,
             showOnlyLastHeartbeat: !!this.show_only_last_heartbeat,
+            dailyViewDays: normalizeDailyViewDays(this.daily_view_days),
             rssTitle: this.rss_title,
         };
     }
@@ -482,6 +484,7 @@ class StatusPage extends BeanModel {
             analyticsType: this.analytics_type,
             showCertificateExpiry: !!this.show_certificate_expiry,
             showOnlyLastHeartbeat: !!this.show_only_last_heartbeat,
+            dailyViewDays: normalizeDailyViewDays(this.daily_view_days),
             rssTitle: this.rss_title,
         };
     }

@@ -90,6 +90,9 @@ export default {
             if (this.type === "720") {
                 return this.$t("days", 30);
             }
+            if (this.type === "daily") {
+                return this.$t("dailyView");
+            }
             return this.$t("hours", 24);
         },
     },

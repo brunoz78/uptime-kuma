@@ -8,6 +8,7 @@ const apicache = require("../utils/response-cache");
 const StatusPage = require("../model/status_page");
 const { UptimeKumaServer } = require("../uptime-kuma-server");
 const { Settings } = require("../settings");
+const { normalizeDailyViewDays } = require("../daily-view");
 
 /**
  * Validates incident data
@@ -335,6 +336,7 @@ module.exports.statusPageSocketHandler = (socket) => {
             statusPage.show_powered_by = config.showPoweredBy;
             statusPage.rss_title = config.rssTitle;
             statusPage.show_only_last_heartbeat = config.showOnlyLastHeartbeat;
+            statusPage.daily_view_days = normalizeDailyViewDays(config.dailyViewDays);
             statusPage.show_certificate_expiry = config.showCertificateExpiry;
             statusPage.modified_date = R.isoDateTime();
             statusPage.analytics_id = config.analyticsId;

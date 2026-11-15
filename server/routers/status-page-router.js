@@ -7,6 +7,7 @@ const { R } = require("redbean-node");
 const { badgeConstants } = require("../../src/util");
 const { makeBadge } = require("badge-maker");
 const { UptimeCalculator } = require("../uptime-calculator");
+const { normalizeDailyViewDays, buildDailyList, periodUptime } = require("../daily-view");
 
 let router = express.Router();
 
@@ -110,6 +111,55 @@ router.get("/api/status-page/heartbeat/:slug", cache("1 minutes"), async (reques
 });
 
 // Status page's manifest.json
+// Status Page Daily View Data (one entry per UTC day)
+router.get("/api/status-page/heartbeat-daily/:slug", cache("5 minutes"), async (request, response) => {
+    allowDevAllOrigin(response);
+
+    try {
+        let dailyList = {};
+        let uptimeList = {};
+
+        let slug = request.params.slug;
+        slug = slug.toLowerCase();
+
+        let statusPage = await R.getRow("SELECT id, daily_view_days FROM status_page WHERE slug = ? ", [slug]);
+        const days = normalizeDailyViewDays(statusPage?.daily_view_days);
+
+        if (statusPage && days > 0) {
+            let monitorIDList = await R.getCol(
+                `
+                SELECT monitor_group.monitor_id FROM monitor_group, \`group\`
+                WHERE monitor_group.group_id = \`group\`.id
+                AND public = 1
+                AND \`group\`.status_page_id = ?
+            `,
+                [statusPage.id]
+            );
+
+            for (let monitorID of monitorIDList) {
+                const uptimeCalculator = await UptimeCalculator.getUptimeCalculator(monitorID);
+                const todayKey = uptimeCalculator.getDailyKey(uptimeCalculator.getCurrentDate(), false);
+                const list = buildDailyList(uptimeCalculator.getDataArray(days, "day"), days, todayKey);
+
+                dailyList[monitorID] = list;
+
+                const uptime = periodUptime(list);
+                if (uptime !== null) {
+                    uptimeList[`${monitorID}_daily`] = uptime;
+                }
+            }
+        }
+
+        response.json({
+            days,
+            dailyList,
+            uptimeList,
+        });
+    } catch (error) {
+        sendHttpError(response, error.message);
+    }
+});
+
 router.get("/api/status-page/:slug/manifest.json", cache("1440 minutes"), async (request, response) => {
     allowDevAllOrigin(response);
     let slug = request.params.slug;

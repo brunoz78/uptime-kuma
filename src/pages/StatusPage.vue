@@ -114,6 +114,23 @@
                     </label>
                 </div>
 
+                <!-- Daily view -->
+                <div class="my-3">
+                    <label for="daily-view-days" class="form-label">{{ $t("dailyView") }}</label>
+                    <select
+                        id="daily-view-days"
+                        v-model.number="config.dailyViewDays"
+                        class="form-select"
+                        data-testid="daily-view-days"
+                    >
+                        <option :value="0">{{ $t("dailyViewOff") }}</option>
+                        <option v-for="n in dailyViewOptions" :key="n" :value="n">
+                            {{ $t("dailyViewDays", [n]) }}
+                        </option>
+                    </select>
+                    <div class="form-text">{{ $t("dailyViewDescription") }}</div>
+                </div>
+
                 <!-- Domain Name List -->
                 <div class="my-3">
                     <label class="form-label">
@@ -494,6 +511,7 @@
                     :show-tags="config.showTags"
                     :show-certificate-expiry="config.showCertificateExpiry"
                     :show-only-last-heartbeat="config.showOnlyLastHeartbeat"
+                    :daily-view-days="dailyViewDays"
                 />
             </div>
 
@@ -703,6 +721,7 @@ export default {
             clickedEditButton: false,
             maintenanceList: [],
             lastUpdateTime: dayjs(),
+            lastDailyUpdateTime: 0,
             updateCountdown: null,
             updateCountdownText: null,
             loading: true,
@@ -713,6 +732,28 @@ export default {
         };
     },
     computed: {
+        /**
+         * Number of days of the daily view, 0 = off
+         * @returns {number} Integer between 0 and 365
+         */
+        dailyViewDays() {
+            const days = Math.floor(Number(this.config.dailyViewDays));
+            return Number.isFinite(days) && days > 0 ? Math.min(365, days) : 0;
+        },
+
+        /**
+         * Choices of the daily view setting. A stored value outside the presets stays selectable.
+         * @returns {number[]} Days
+         */
+        dailyViewOptions() {
+            const options = [90, 180, 365];
+            if (this.dailyViewDays > 0 && !options.includes(this.dailyViewDays)) {
+                options.push(this.dailyViewDays);
+                options.sort((a, b) => a - b);
+            }
+            return options;
+        },
+
         logoURL() {
             if (this.imgDataUrl.startsWith("data:")) {
                 return this.imgDataUrl;
@@ -894,6 +935,14 @@ export default {
     },
     watch: {
         /**
+         * Load the daily data as soon as the daily view is known to be on
+         * @returns {void}
+         */
+        dailyViewDays() {
+            this.updateDailyHeartbeatList();
+        },
+
+        /**
          * If connected to the socket and logged in, request private data of this statusPage
          * @param {boolean} loggedIn Is the client logged in?
          * @returns {void}
@@ -1052,17 +1101,46 @@ export default {
         },
 
         /**
+         * Load the per-day data of the daily view. The server caches it for 5 minutes,
+         * so it is fetched at most that often.
+         * @returns {void}
+         */
+        updateDailyHeartbeatList() {
+            if (this.dailyViewDays <= 0) {
+                return;
+            }
+
+            this.lastDailyUpdateTime = Date.now();
+
+            axios
+                .get("/api/status-page/heartbeat-daily/" + this.slug)
+                .then((res) => {
+                    const { dailyList, uptimeList } = res.data;
+                    this.$root.dailyHeartbeatList = dailyList || {};
+                    this.$root.dailyUptimeList = uptimeList || {};
+                    this.$root.uptimeList = { ...this.$root.uptimeList, ...this.$root.dailyUptimeList };
+                })
+                .catch((error) => {
+                    console.log(error);
+                });
+        },
+
+        /**
          * Update the heartbeat list and update favicon if necessary
          * @returns {void}
          */
         updateHeartbeatList() {
+            if (Date.now() - this.lastDailyUpdateTime >= 5 * 60 * 1000) {
+                this.updateDailyHeartbeatList();
+            }
+
             // If editMode, it will use the data from websocket.
             if (!this.editMode) {
                 axios.get("/api/status-page/heartbeat/" + this.slug).then((res) => {
                     const { heartbeatList, uptimeList } = res.data;
 
                     this.$root.heartbeatList = heartbeatList;
-                    this.$root.uptimeList = uptimeList;
+                    this.$root.uptimeList = { ...uptimeList, ...this.$root.dailyUptimeList };
 
                     const heartbeatIds = Object.keys(heartbeatList);
                     const downMonitors = heartbeatIds.reduce((downMonitorsAmount, currentId) => {
