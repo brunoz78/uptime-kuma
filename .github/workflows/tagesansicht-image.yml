@@ -1,0 +1,61 @@
+name: Build image
+
+on:
+    push:
+        branches:
+            - tagesansicht
+        paths-ignore:
+            - "docs/**"
+            - "**.md"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    packages: write
+
+concurrency:
+    group: tagesansicht-image
+    cancel-in-progress: true
+
+jobs:
+    image:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
+            - name: Unit tests of the daily view
+              run: |
+                  npm ci
+                  node --test test/backend-test/test-daily-view.js
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 1
+                  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+            - name: Read version
+              id: version
+              run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+            - uses: docker/setup-qemu-action@v3
+            - uses: docker/setup-buildx-action@v3
+
+            - uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - uses: docker/build-push-action@v6
+              with:
+                  context: .
+                  file: docker/tagesansicht.dockerfile
+                  platforms: linux/amd64,linux/arm64
+                  push: true
+                  build-args: |
+                      UPSTREAM_VERSION=${{ steps.version.outputs.version }}
+                  tags: |
+                      ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}-tagesansicht
+                      ghcr.io/${{ github.repository }}:latest
