@@ -64,6 +64,12 @@ class UptimeCalculator {
     statHourlyKeepDay = 30;
 
     /**
+     * Pending or finished init() started by getUptimeCalculator()
+     * @type {Promise<void>|null}
+     */
+    initPromise = null;
+
+    /**
      * Get the uptime calculator for a monitor
      * Initializes and returns the monitor if it does not exist
      * @param {number} monitorID the id of the monitor
@@ -75,10 +81,21 @@ class UptimeCalculator {
         }
 
         if (!UptimeCalculator.list[monitorID]) {
-            UptimeCalculator.list[monitorID] = new UptimeCalculator();
-            await UptimeCalculator.list[monitorID].init(monitorID);
+            const created = new UptimeCalculator();
+            UptimeCalculator.list[monitorID] = created;
+            created.initPromise = created.init(monitorID).catch((error) => {
+                if (UptimeCalculator.list[monitorID] === created) {
+                    delete UptimeCalculator.list[monitorID];
+                }
+                throw error;
+            });
         }
-        return UptimeCalculator.list[monitorID];
+
+        // Callers arriving while the statistics are still loading have to wait for them too,
+        // otherwise they would work with an empty calculator.
+        const calculator = UptimeCalculator.list[monitorID];
+        await calculator.initPromise;
+        return calculator;
     }
 
     /**

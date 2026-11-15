@@ -1,6 +1,11 @@
 <template>
     <div ref="wrap" class="daily-wrap" data-testid="daily-heartbeat-bar">
-        <div class="daily-bar" :style="{ gap: layout.gap + 'px' }" @mouseleave="hovered = null">
+        <div
+            class="daily-bar"
+            :class="{ dense: layout.gap === 0 }"
+            :style="{ gap: layout.gap + 'px', width: barWidth + 'px' }"
+            @mouseleave="hovered = null"
+        >
             <div
                 v-for="(day, index) in visibleList"
                 :key="day.date"
@@ -13,9 +18,9 @@
             ></div>
         </div>
 
-        <div class="daily-legend">
+        <div class="daily-legend" :style="{ width: barWidth + 'px' }">
             <span>{{ $t("dailyViewDays", [visibleList.length]) }}</span>
-            <span>{{ $t("dailyViewToday") }}</span>
+            <span v-if="barWidth >= 110">{{ $t("dailyViewToday") }}</span>
         </div>
 
         <div v-if="hovered" class="daily-tooltip" :style="tooltipStyle" role="tooltip">
@@ -105,7 +110,8 @@ export default {
             }
 
             for (const candidate of LAYOUTS) {
-                const width = Math.floor((available - candidate.gap * (total - 1)) / total);
+                // Fractional widths are fine, the bar should fill the available width
+                const width = (available - candidate.gap * (total - 1)) / total;
                 if (width >= candidate.minWidth) {
                     return { gap: candidate.gap, width: Math.min(MAX_BEAT_WIDTH, width), count: total };
                 }
@@ -119,13 +125,24 @@ export default {
             return this.fullList.slice(-this.layout.count);
         },
 
+        /**
+         * Width of the whole bar in px, the legend below uses the same width
+         * @returns {number} Width
+         */
+        barWidth() {
+            const count = this.visibleList.length;
+            if (count === 0) {
+                return 0;
+            }
+            return Math.min(this.wrapWidth, count * (this.layout.width + this.layout.gap) - this.layout.gap);
+        },
+
         tooltipStyle() {
             if (!this.hovered) {
                 return {};
             }
             const pitch = this.layout.width + this.layout.gap;
-            const barWidth = this.visibleList.length * pitch - this.layout.gap;
-            const offset = Math.max(0, this.wrapWidth - barWidth);
+            const offset = Math.max(0, this.wrapWidth - this.barWidth);
             const center = offset + this.hovered.index * pitch + this.layout.width / 2;
             const left = Math.min(Math.max(0, center - TOOLTIP_WIDTH / 2), this.wrapWidth - TOOLTIP_WIDTH);
             return {
@@ -228,14 +245,19 @@ export default {
 
 .daily-bar {
     display: flex;
-    justify-content: flex-end;
     align-items: stretch;
     height: 30px;
+    margin-left: auto;
     overflow: hidden;
+
+    &.dense .daily-beat {
+        border-radius: 0;
+    }
 }
 
 .daily-beat {
     flex: 0 0 auto;
+    min-width: 0;
     border-radius: 2px;
     background-color: #dfe3e8;
 
@@ -264,6 +286,7 @@ export default {
     display: flex;
     justify-content: space-between;
     margin-top: 2px;
+    margin-left: auto;
     font-size: 12px;
     color: $secondary-text;
     white-space: nowrap;

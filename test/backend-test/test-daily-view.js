@@ -1,6 +1,7 @@
 const { describe, test } = require("node:test");
 const assert = require("node:assert");
 const { normalizeDailyViewDays, classifyDay, buildDailyList, periodUptime } = require("../../server/daily-view");
+const { UptimeCalculator } = require("../../server/uptime-calculator");
 
 const DAY = 86400;
 // 2026-11-15 00:00:00 UTC
@@ -88,5 +89,42 @@ describe("Daily view", () => {
         assert.strictEqual(periodUptime(list), 0.95);
         assert.strictEqual(periodUptime(buildDailyList([], 5, TODAY)), null);
         assert.strictEqual(periodUptime([]), null);
+    });
+
+    test("getUptimeCalculator() lets concurrent callers wait for the same init()", async (t) => {
+        const monitorID = 987654;
+        let initCalls = 0;
+
+        t.mock.method(UptimeCalculator.prototype, "init", async function () {
+            initCalls++;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            this.loaded = true;
+        });
+        t.after(() => UptimeCalculator.remove(monitorID));
+
+        // What each caller sees at the moment it gets its calculator
+        const seen = await Promise.all([
+            UptimeCalculator.getUptimeCalculator(monitorID).then((c) => c.loaded),
+            UptimeCalculator.getUptimeCalculator(monitorID).then((c) => c.loaded),
+        ]);
+
+        assert.deepStrictEqual(seen, [true, true]);
+        assert.strictEqual(initCalls, 1);
+    });
+
+    test("getUptimeCalculator() retries after a failed init()", async (t) => {
+        const monitorID = 987655;
+        let fail = true;
+
+        t.mock.method(UptimeCalculator.prototype, "init", async function () {
+            if (fail) {
+                throw new Error("database not ready");
+            }
+        });
+        t.after(() => UptimeCalculator.remove(monitorID));
+
+        await assert.rejects(UptimeCalculator.getUptimeCalculator(monitorID), /database not ready/);
+        fail = false;
+        assert.ok(await UptimeCalculator.getUptimeCalculator(monitorID));
     });
 });
