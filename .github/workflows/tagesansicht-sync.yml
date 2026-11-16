@@ -1,0 +1,60 @@
+name: Sync upstream
+
+# Scheduled workflows are paused by GitHub after 60 days without any activity in the repository.
+on:
+    schedule:
+        - cron: "17 4 * * *"
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "Upstream version to merge (empty: newest release of the current major version)"
+                required: false
+                default: ""
+
+permissions:
+    contents: write
+    actions: write
+
+concurrency:
+    group: tagesansicht-sync
+    cancel-in-progress: false
+
+jobs:
+    sync:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: tagesansicht
+                  fetch-depth: 0
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
+            - name: Merge the newest upstream release
+              id: sync
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  bash .github/scripts/sync-upstream.sh
+              env:
+                  SYNC_VERSION: ${{ inputs.version }}
+
+            - name: Test and build the merged code
+              if: steps.sync.outputs.updated == 'true'
+              run: |
+                  npm ci
+                  node --test test/backend-test/test-daily-view.js
+                  npm run build
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 1
+                  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+            - name: Push and start the image build
+              if: steps.sync.outputs.updated == 'true'
+              run: |
+                  git push origin HEAD:tagesansicht
+                  gh workflow run tagesansicht-image.yml --ref tagesansicht
+              env:
+                  GH_TOKEN: ${{ github.token }}
