@@ -71,7 +71,7 @@ done
 
 conflicts="$(git diff --name-only --diff-filter=U)"
 if [ -n "$conflicts" ]; then
-    note "Merging upstream ${target:-$ref} needs manual work, these files conflict:"
+    note "Merging upstream ${SYNC_REF:-$target} needs manual work, these files conflict:"
     note "$conflicts"
     git merge --abort
     exit 1
