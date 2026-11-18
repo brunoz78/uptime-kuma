@@ -2,21 +2,29 @@
     <img src="./public/icon.svg" width="128" alt="Uptime Kuma Logo" />
 </div>
 
-# Uptime Kuma
+# Uptime Kuma mit Tagesansicht
 
-Uptime Kuma is an easy-to-use self-hosted monitoring tool.
+Dieser Fork von [Uptime Kuma](https://github.com/louislam/uptime-kuma) ergänzt die Statusseiten um eine
+**Tagesansicht**: einen Balken pro Tag über 90, 180 oder 365 Tage, und per Klick die Details eines einzelnen Tages.
+Alles andere ist das unveränderte Uptime Kuma derselben Version.
 
-> [!NOTE]
-> **Dies ist ein Fork von [louislam/uptime-kuma](https://github.com/louislam/uptime-kuma) mit einer Tagesansicht für Statusseiten.**
-> Die Änderungen sind unten im Abschnitt [Änderungen gegenüber dem Original](#änderungen-gegenüber-dem-original) beschrieben.
-> Alles andere in dieser Datei beschreibt das Originalprojekt.
+Der Fork wird automatisch mit neuen Releases des Originals abgeglichen und als Docker-Image
+`ghcr.io/brunoz78/uptime-kuma` veröffentlicht.
+
+- [Änderungen gegenüber dem Original](#änderungen-gegenüber-dem-original)
+- [Installation](#installation)
+- [Vom Original wechseln](#vom-original-wechseln)
+- [Aktualisieren](#aktualisieren)
+- [Abgleich mit dem Original](#abgleich-mit-dem-original)
+- [Entwicklung](#entwicklung)
+- [Herkunft und Lizenz](#herkunft-und-lizenz)
 
 ## Änderungen gegenüber dem Original
 
 ### Tagesansicht auf Statusseiten
 
-Im Original zeigt eine Statusseite pro Monitor nur die letzten 100 Checks. In diesem Fork lässt sich pro Statusseite
-eine **Tagesansicht** einschalten: Jeder Monitor zeigt dann einen Balken pro Kalendertag.
+Im Original zeigt eine Statusseite pro Monitor nur die letzten 100 Checks. Hier lässt sich pro Statusseite eine
+Tagesansicht einschalten: Jeder Monitor zeigt dann einen Balken pro Kalendertag.
 
 - **Einstellung:** Statusseite bearbeiten → «Tagesansicht» → Aus, 90, 180 oder 365 Tage.
 - **Farben:**
@@ -29,241 +37,148 @@ eine **Tagesansicht** einschalten: Jeder Monitor zeigt dann einen Balken pro Kal
   | Blau   | Wartung, ohne fehlgeschlagenen Check       |
   | Grau   | keine Daten                                |
 
-- **Tooltip:** Datum, Status, Verfügbarkeit und durchschnittliche Antwortzeit des Tages.
+- **Tooltip** beim Darüberfahren: Datum, Status, Verfügbarkeit und durchschnittliche Antwortzeit.
 - **Prozentzahl** neben dem Monitor: Verfügbarkeit über den gewählten Zeitraum statt über 24 Stunden.
-- **Tagesgrenze:** Ein Tag ist ein UTC-Tag, weil Uptime Kuma die Tagesstatistik so speichert.
-- **Daten:** Die Werte stammen aus der vorhandenen Tagesstatistik (`stat_daily`). Die Ansicht funktioniert mit SQLite
-  und MariaDB und zeigt sofort die Vergangenheit, soweit Statistik vorhanden ist (höchstens 365 Tage).
-- **Auf schmalen Bildschirmen** werden die ältesten Tage ausgeblendet.
+- **Vergangenheit:** Die Werte stammen aus der vorhandenen Tagesstatistik. Nach dem Einschalten sind die bisherigen
+  Tage sofort sichtbar, soweit Statistik vorhanden ist.
+- **Schmale Bildschirme:** Die ältesten Tage werden ausgeblendet, wenn der Platz nicht reicht.
+
+### Details eines Tages
+
+Ein Klick (oder Tippen) auf einen Tag öffnet ein Fenster mit den Details:
+
+| Angabe                                             | Verfügbar für                                                              |
+| -------------------------------------------------- | -------------------------------------------------------------------------- |
+| Checks, Verfügbarkeit, Antwortzeit (Ø, min., max.) | alle angezeigten Tage                                                      |
+| Verlauf über 24 Stunden                            | die letzten 30 Tage                                                        |
+| Ausfälle und Wartung mit Beginn, Ende und Dauer    | solange die Heartbeats aufbewahrt werden (Einstellungen → Monitor-Verlauf) |
+
+Fehlermeldungen der Checks werden wie überall auf öffentlichen Statusseiten nicht angezeigt.
+
+### Gut zu wissen
+
+- **Tagesgrenze:** Ein Tag ist ein UTC-Tag, weil Uptime Kuma die Tagesstatistik so speichert. Uhrzeiten im
+  Detailfenster werden in Ortszeit angezeigt.
+- **Datenbank:** Funktioniert mit SQLite und MariaDB. Eine Migration ergänzt die Spalte `status_page.daily_view_days`.
+- **Ausgeschaltet** («Tagesansicht: Aus») verhält sich alles wie im Original.
 - **Sprachen:** Deutsch und Englisch.
 
 ### Fehlerbehebung
 
-- Kurz nach einem Neustart konnten gleichzeitige Anfragen eine noch nicht geladene Uptime-Statistik erhalten, sodass
-  ein Monitor bis zu fünf Minuten ohne Daten erschien. Die Statistik wird jetzt einmal geladen, und alle Anfragen
-  warten darauf.
+Kurz nach einem Neustart konnten gleichzeitige Anfragen eine noch nicht geladene Uptime-Statistik erhalten, sodass ein
+Monitor bis zu fünf Minuten ohne Daten erschien. Die Statistik wird jetzt einmal geladen, und alle Anfragen warten
+darauf.
 
-### Technisch
+## Installation
 
-| Bereich    | Änderung                                                                                       |
-| ---------- | ---------------------------------------------------------------------------------------------- |
-| Datenbank  | neue Spalte `status_page.daily_view_days` (Migration `2026-11-15-0000-status-page-daily-view`) |
-| Server     | `server/daily-view.js`, Endpunkt `GET /api/status-page/heartbeat-daily/:slug`                  |
-| Oberfläche | `src/components/DailyHeartbeatBar.vue`, Einstellung in `src/pages/StatusPage.vue`              |
-| Tests      | `test/backend-test/test-daily-view.js`                                                         |
-| Workflows  | die Workflows des Originals sind entfernt, siehe unten                                         |
+Docker ist der vorgesehene Weg. Das Image gibt es für `linux/amd64` und `linux/arm64`.
 
-Bei «Tagesansicht: Aus» verhält sich alles wie im Original. Ein Wechsel zurück zum offiziellen Image ist jederzeit
-möglich; die zusätzliche Spalte stört dort nicht.
+> [!WARNING]
+> SQLite funktioniert nicht auf NFS. Verwende für `/app/data` ein lokales Verzeichnis oder ein Docker-Volume.
 
-### Docker-Image
+### Docker Compose
 
-`ghcr.io/brunoz78/uptime-kuma` ist das offizielle Image derselben Version mit diesen Änderungen darüber
-(amd64 und arm64). Es ersetzt `louislam/uptime-kuma`, das Daten-Volume bleibt dasselbe.
-
-| Tag                      | Inhalt                                     |
-| ------------------------ | ------------------------------------------ |
-| `<version>-tagesansicht` | feste Version, z. B. `2.5.12-tagesansicht` |
-| `latest`                 | neueste gebaute Version                    |
-
-### Automatischer Abgleich mit dem Original
-
-Der Workflow «Sync upstream» prüft täglich, ob es ein neues stabiles Release derselben Hauptversion gibt. Wenn ja,
-übernimmt er es, testet und baut es und veröffentlicht ein neues Image. Bei Konflikten bricht er ab, ohne etwas zu
-ändern. Eine neue Hauptversion (z. B. 3.x) wird nur von Hand übernommen.
-
-<a target="_blank" href="https://github.com/louislam/uptime-kuma"><img src="https://img.shields.io/github/stars/louislam/uptime-kuma?style=flat" /></a> <a target="_blank" href="https://hub.docker.com/r/louislam/uptime-kuma"><img src="https://img.shields.io/docker/pulls/louislam/uptime-kuma" /></a> <a target="_blank" href="https://hub.docker.com/r/louislam/uptime-kuma"><img src="https://img.shields.io/docker/v/louislam/uptime-kuma/2?label=docker%20image%20ver." /></a> <a target="_blank" href="https://github.com/louislam/uptime-kuma"><img src="https://img.shields.io/github/last-commit/louislam/uptime-kuma" /></a> <a target="_blank" href="https://opencollective.com/uptime-kuma"><img src="https://opencollective.com/uptime-kuma/total/badge.svg?label=Open%20Collective%20Backers&color=brightgreen" /></a>
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/louislam?label=GitHub%20Sponsors)](https://github.com/sponsors/louislam) <a href="https://weblate.kuma.pet/projects/uptime-kuma/uptime-kuma/">
-<img src="https://weblate.kuma.pet/widgets/uptime-kuma/-/svg-badge.svg" alt="Translation status" />
-</a>
-
-<img src="https://user-images.githubusercontent.com/1336778/212262296-e6205815-ad62-488c-83ec-a5b0d0689f7c.jpg" width="700" alt="Uptime Kuma Dashboard Screenshot" />
-
-## 🥔 Live Demo
-
-Try it!
-
-Demo Server (Location: Frankfurt - Germany): <https://demo.kuma.pet/start-demo>
-
-It is a temporary live demo, all data will be deleted after 10 minutes. Sponsored by [Uptime Kuma Sponsors](https://github.com/louislam/uptime-kuma#%EF%B8%8F-sponsors).
-
-## ⭐ Features
-
-- Monitoring uptime for HTTP(s) / TCP / HTTP(s) Keyword / HTTP(s) Json Query / Websocket / Ping / DNS Record / Push / Steam Game Server / Docker Containers
-- Fancy, Reactive, Fast UI/UX
-- Notifications via Telegram, Discord, Gotify, Slack, Pushover, Email (SMTP), and [90+ notification services, click here for the full list](https://github.com/louislam/uptime-kuma/tree/master/src/components/notifications)
-- 20-second intervals
-- [Multi Languages](https://github.com/louislam/uptime-kuma/tree/master/src/lang)
-- Multiple status pages
-- Map status pages to specific domains
-- Ping chart
-- Certificate info
-- Proxy support
-- 2FA support
-
-## 🔧 How to Install
-
-### 🐳 Docker Compose
+```yaml
+services:
+  uptime-kuma:
+    image: ghcr.io/brunoz78/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./data:/app/data
+```
 
 ```bash
-mkdir uptime-kuma
-cd uptime-kuma
-curl -o compose.yaml https://raw.githubusercontent.com/louislam/uptime-kuma/master/compose.yaml
 docker compose up -d
 ```
 
-Uptime Kuma is now running on all network interfaces (e.g. http://localhost:3001 or http://your-ip:3001).
+Uptime Kuma läuft danach auf Port 3001 (z. B. `http://localhost:3001`).
 
-> [!WARNING]
-> File Systems like **NFS** (Network File System) are **NOT** supported. Please map to a local directory or volume.
-
-### 🐳 Docker Command
+### Docker
 
 ```bash
-docker run -d --restart=always -p 3001:3001 -v uptime-kuma:/app/data --name uptime-kuma louislam/uptime-kuma:2
+docker run -d --restart=unless-stopped -p 3001:3001 -v uptime-kuma:/app/data --name uptime-kuma ghcr.io/brunoz78/uptime-kuma:latest
 ```
 
-Uptime Kuma is now running on all network interfaces (e.g. http://localhost:3001 or http://your-ip:3001).
+### Portainer
 
-If you want to limit exposure to localhost only:
+Unter **Stacks → Add stack** den Compose-Text von oben einfügen und bereitstellen. Für einen bestehenden Container
+genügt es, das Image wie unter [Vom Original wechseln](#vom-original-wechseln) zu ersetzen.
+
+### Image-Tags
+
+| Tag                      | Inhalt                                     |
+| ------------------------ | ------------------------------------------ |
+| `latest`                 | neueste gebaute Version                    |
+| `<version>-tagesansicht` | feste Version, z. B. `2.5.12-tagesansicht` |
+
+Mit `latest` kommt jede neue Version des Originals ohne weiteres Zutun ins Image, sobald du es neu ziehst. Mit einem
+festen Tag bestimmst du selbst, wann du wechselst.
+
+## Vom Original wechseln
+
+Das Image ist das offizielle Image derselben Version mit den Änderungen dieses Forks darüber. Die Daten bleiben
+erhalten.
+
+1. Daten-Volume sichern (der Ordner oder das Volume, das auf `/app/data` zeigt).
+2. Im Container oder Stack `louislam/uptime-kuma:…` durch `ghcr.io/brunoz78/uptime-kuma:<version>-tagesansicht`
+   ersetzen. Volumes, Ports und Umgebungsvariablen bleiben gleich.
+3. Container neu erstellen. Beim ersten Start ergänzt eine Migration die neue Spalte.
+4. Statusseite bearbeiten und die Tagesansicht einschalten.
+
+Zurück zum Original geht jederzeit: wieder das offizielle Image derselben oder einer neueren Version eintragen. Die
+zusätzliche Spalte stört dort nicht.
+
+## Aktualisieren
 
 ```bash
-docker run ... -p 127.0.0.1:3001:3001 ...
+docker compose pull
+docker compose up -d
 ```
 
-### 💪🏻 Non-Docker
+In Portainer: Stack öffnen → **Update the stack** mit **Re-pull image**. Vorher das Daten-Volume sichern, denn neue
+Versionen können die Datenbank migrieren.
 
-Requirements:
+## Abgleich mit dem Original
 
-- Platform
-  - ✅ Major Linux distros such as Debian, Ubuntu, Fedora and ArchLinux etc.
-  - ✅ Windows 10 (x64), Windows Server 2012 R2 (x64) or higher
-  - ❌ FreeBSD / OpenBSD / NetBSD
-  - ❌ Replit / Heroku
-- [Node.js](https://nodejs.org/en/download/) >= 20.4
-- [Git](https://git-scm.com/downloads)
-- [pm2](https://pm2.keymetrics.io/) - For running Uptime Kuma in the background
+Der Workflow «Sync upstream» prüft täglich, ob es ein neues stabiles Release derselben Hauptversion gibt. Wenn ja,
+übernimmt er es, führt die Tests aus, baut die Oberfläche und veröffentlicht ein neues Image. Er wartet, bis das
+offizielle Image dieser Version erschienen ist. Bei Konflikten bricht er ab, ohne etwas zu ändern.
+
+Eine neue Hauptversion (z. B. 3.x) wird nicht automatisch übernommen. Dafür den Workflow unter **Actions → Sync upstream
+→ Run workflow** mit der gewünschten Version starten.
+
+## Entwicklung
+
+Voraussetzungen: Node.js 20.4 oder neuer, npm, Git.
 
 ```bash
-git clone https://github.com/louislam/uptime-kuma.git
+git clone https://github.com/brunoz78/uptime-kuma.git
 cd uptime-kuma
-npm run setup
-
-# Option 1. Try it
+npm ci
+npm run build
 node server/server.js
-
-# (Recommended) Option 2. Run in the background using PM2
-# Install PM2 if you don't have it:
-npm install pm2 -g && pm2 install pm2-logrotate
-
-# Start Server
-pm2 start server/server.js --name uptime-kuma
 ```
 
-Uptime Kuma is now running on all network interfaces (e.g. http://localhost:3001 or http://your-ip:3001).
+| Datei                                  | Inhalt                                                     |
+| -------------------------------------- | ---------------------------------------------------------- |
+| `server/daily-view.js`                 | Logik der Tagesansicht und der Tagesdetails                |
+| `server/routers/status-page-router.js` | Endpunkte `/api/status-page/heartbeat-daily/…`             |
+| `src/components/DailyHeartbeatBar.vue` | Tagesleiste                                                |
+| `src/components/DailyDetailDialog.vue` | Detailfenster eines Tages                                  |
+| `test/backend-test/test-daily-view.js` | Tests (`node --test test/backend-test/test-daily-view.js`) |
+| `docker/tagesansicht.dockerfile`       | Image auf Basis des offiziellen Images                     |
+| `.github/workflows/`                   | Image-Build und Abgleich mit dem Original                  |
 
-More useful PM2 Commands
+Für alles, was nicht die Tagesansicht betrifft, gilt die Dokumentation des Originals:
+[Wiki](https://github.com/louislam/uptime-kuma/wiki) und [README](https://github.com/louislam/uptime-kuma#readme).
 
-```bash
-# If you want to see the current console output
-pm2 monit
+## Herkunft und Lizenz
 
-# If you want to add it to startup
-pm2 startup && pm2 save
-```
+Uptime Kuma stammt von [Louis Lam](https://github.com/louislam) und den Mitwirkenden des Projekts. Dieser Fork ergänzt
+nur die oben beschriebenen Teile. Fehler, die auch mit dem offiziellen Image auftreten, gehören in das
+[Original-Repository](https://github.com/louislam/uptime-kuma/issues).
 
-### Advanced Installation
-
-If you need more options or need to browse via a reverse proxy, please read:
-
-<https://github.com/louislam/uptime-kuma/wiki/%F0%9F%94%A7-How-to-Install>
-
-## 🆙 How to Update
-
-Please read:
-
-<https://github.com/louislam/uptime-kuma/wiki/%F0%9F%86%99-How-to-Update>
-
-## 🆕 What's Next?
-
-I will assign requests/issues to the next milestone.
-
-<https://github.com/louislam/uptime-kuma/milestones>
-
-## ❤️ Sponsors
-
-Thank you so much! (GitHub Sponsors will be updated manually. OpenCollective sponsors will be updated automatically, the list will be cached by GitHub though. It may need some time to be updated)
-
-<img src="https://uptime.kuma.pet/sponsors?v=6" alt="Uptime Kuma Sponsors" />
-
-## 🖼 More Screenshots
-
-Light Mode:
-
-<img src="https://uptime.kuma.pet/img/light.jpg" width="512" alt="Uptime Kuma Light Mode Screenshot of how the Dashboard looks" />
-
-Status Page:
-
-<img src="https://user-images.githubusercontent.com/1336778/134628766-a3fe0981-0926-4285-ab46-891a21c3e4cb.png" width="512" alt="Uptime Kuma Status Page Screenshot" />
-
-Settings Page:
-
-<img src="https://louislam.net/uptimekuma/2.jpg" width="400" alt="Uptime Kuma Settings Page Screenshot" />
-
-Telegram Notification Sample:
-
-<img src="https://louislam.net/uptimekuma/3.jpg" width="400" alt="Uptime Kuma Telegram Notification Sample Screenshot" />
-
-## Motivation
-
-- I was looking for a self-hosted monitoring tool like "Uptime Robot", but it is hard to find a suitable one. One of the closest ones is statping. Unfortunately, it is not stable and no longer maintained.
-- Wanted to build a fancy UI.
-- Learn Vue 3 and vite.js.
-- Show the power of Bootstrap 5.
-- Try to use WebSocket with SPA instead of a REST API.
-- Deploy my first Docker image to Docker Hub.
-
-If you love this project, please consider giving it a ⭐.
-
-## 🗣️ Discussion / Ask for Help
-
-⚠️ For any general or technical questions, please don't send me an email, as I am unable to provide support in that manner. I will not respond if you ask questions there.
-
-I recommend using Google, GitHub Issues, or Uptime Kuma's subreddit for finding answers to your question. If you cannot find the information you need, feel free to ask:
-
-- [GitHub Issues](https://github.com/louislam/uptime-kuma/issues)
-- [Subreddit (r/UptimeKuma)](https://www.reddit.com/r/UptimeKuma/)
-
-My Reddit account: [u/louislamlam](https://reddit.com/u/louislamlam)
-You can mention me if you ask a question on the subreddit.
-
-## Contributions
-
-### Create Pull Requests
-
-Pull requests are awesome.
-To keep reviews fast and effective, please make sure you’ve [read our pull request guidelines](https://github.com/louislam/uptime-kuma/blob/master/CONTRIBUTING.md#can-i-create-a-pull-request-for-uptime-kuma).
-
-### Test Pull Requests
-
-There are a lot of pull requests right now, but I don't have time to test them all.
-
-If you want to help, you can check this:
-<https://github.com/louislam/uptime-kuma/wiki/Test-Pull-Requests>
-
-### Test Beta Version
-
-Check out the latest beta release here: <https://github.com/louislam/uptime-kuma/releases>
-
-### Bug Reports / Feature Requests
-
-If you want to report a bug or request a new feature, feel free to open a [new issue](https://github.com/louislam/uptime-kuma/issues).
-
-### Translations
-
-If you want to translate Uptime Kuma into your language, please visit [Weblate Readme](https://github.com/louislam/uptime-kuma/blob/master/src/lang/README.md).
-
-### Spelling & Grammar
-
-Feel free to correct the grammar in the documentation or code.
-My mother language is not English and my grammar is not that great.
+Lizenz: [MIT](LICENSE), wie das Original.

@@ -59,6 +59,12 @@ fi
 git fetch --no-tags "$UPSTREAM" "$ref"
 git merge --no-ff --no-commit FETCH_HEAD || true
 
+# The README describes this fork; changes of the upstream README are not taken over
+if git ls-files --unmerged -- README.md | grep -q .; then
+    git checkout --ours -- README.md
+    git add README.md
+fi
+
 # This fork has its own workflows: drop everything upstream brings into .github/workflows, and dependabot
 for file in $(git ls-files .github/workflows | sort -u) .github/dependabot.yml; do
     name="$(basename "$file")"
