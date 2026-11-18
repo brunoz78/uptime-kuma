@@ -512,6 +512,7 @@
                     :show-certificate-expiry="config.showCertificateExpiry"
                     :show-only-last-heartbeat="config.showOnlyLastHeartbeat"
                     :daily-view-days="dailyViewDays"
+                    :slug="slug"
                 />
             </div>
 

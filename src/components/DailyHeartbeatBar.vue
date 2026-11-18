@@ -13,8 +13,12 @@
                 :class="day.status"
                 :style="{ width: layout.width + 'px' }"
                 :aria-label="tooltipLines(day).join(', ')"
+                :role="day.status === 'missing' ? null : 'button'"
+                :tabindex="day.status === 'missing' ? null : 0"
                 @mouseenter="hover(day, index)"
-                @click="hover(day, index)"
+                @click="select(day, index)"
+                @keydown.enter.prevent="select(day, index)"
+                @keydown.space.prevent="select(day, index)"
             ></div>
         </div>
 
@@ -56,6 +60,7 @@ export default {
             required: true,
         },
     },
+    emits: ["select"],
     data() {
         return {
             wrapWidth: 0,
@@ -189,6 +194,22 @@ export default {
         },
 
         /**
+         * Open the details of a day. Days without data have no details.
+         * @param {object} day Day entry
+         * @param {number} index Index in the visible list
+         * @returns {void}
+         */
+        select(day, index) {
+            if (day.status === "missing") {
+                this.hover(day, index);
+                return;
+            }
+            // The dialog shows the details, the tooltip would only stay behind it
+            this.hovered = null;
+            this.$emit("select", day);
+        },
+
+        /**
          * Localized date of a day entry
          * @param {string} date Date as YYYY-MM-DD (UTC)
          * @returns {string} Formatted date
@@ -277,8 +298,14 @@ export default {
         background-color: $maintenance;
     }
 
-    &:hover {
+    &:not(.missing) {
+        cursor: pointer;
+    }
+
+    &:hover,
+    &:focus-visible {
         opacity: 0.7;
+        outline: none;
     }
 }
 

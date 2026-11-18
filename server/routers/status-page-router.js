@@ -7,7 +7,22 @@ const { R } = require("redbean-node");
 const { badgeConstants } = require("../../src/util");
 const { makeBadge } = require("badge-maker");
 const { UptimeCalculator } = require("../uptime-calculator");
-const { normalizeDailyViewDays, buildDailyList, periodUptime } = require("../daily-view");
+const {
+    HOURLY_DAYS,
+    normalizeDailyViewDays,
+    buildDailyList,
+    periodUptime,
+    parseDayKey,
+    hasHourlyData,
+    buildHourlyList,
+    heartbeatTimeToMs,
+    buildPeriods,
+} = require("../daily-view");
+const { Settings } = require("../settings");
+const dayjs = require("dayjs");
+
+/** Same default as server/jobs/clear-old-data.js */
+const DEFAULT_KEEP_PERIOD = 365;
 
 let router = express.Router();
 
@@ -110,7 +125,6 @@ router.get("/api/status-page/heartbeat/:slug", cache("1 minutes"), async (reques
     }
 });
 
-// Status page's manifest.json
 // Status Page Daily View Data (one entry per UTC day)
 router.get("/api/status-page/heartbeat-daily/:slug", cache("5 minutes"), async (request, response) => {
     allowDevAllOrigin(response);
@@ -160,6 +174,118 @@ router.get("/api/status-page/heartbeat-daily/:slug", cache("5 minutes"), async (
     }
 });
 
+// Status Page Daily View: details of one day of one monitor
+router.get("/api/status-page/heartbeat-daily/:slug/:monitorID/:date", cache("5 minutes"), async (request, response) => {
+    allowDevAllOrigin(response);
+
+    try {
+        const slug = request.params.slug.toLowerCase();
+        const monitorID = parseInt(request.params.monitorID, 10);
+
+        const statusPage = await R.getRow("SELECT id, daily_view_days FROM status_page WHERE slug = ? ", [slug]);
+        const days = normalizeDailyViewDays(statusPage?.daily_view_days);
+
+        // Only monitors that are shown on this status page, and only while the daily view is on
+        const isPublic =
+            statusPage &&
+            days > 0 &&
+            Number.isInteger(monitorID) &&
+            (await R.getCell(
+                `
+                    SELECT monitor_group.monitor_id FROM monitor_group, \`group\`
+                    WHERE monitor_group.group_id = \`group\`.id
+                    AND public = 1
+                    AND \`group\`.status_page_id = ?
+                    AND monitor_group.monitor_id = ?
+                `,
+                [statusPage.id, monitorID]
+            ));
+
+        if (!isPublic) {
+            response.status(404).json({ ok: false, msg: "Not Found" });
+            return;
+        }
+
+        const uptimeCalculator = await UptimeCalculator.getUptimeCalculator(monitorID);
+        const now = uptimeCalculator.getCurrentDate();
+        const todayKey = uptimeCalculator.getDailyKey(now, false);
+        const dayKey = parseDayKey(request.params.date, todayKey, days);
+
+        if (dayKey === null) {
+            response.status(400).json({ ok: false, msg: "Invalid date" });
+            return;
+        }
+
+        const dayData = uptimeCalculator.dailyUptimeDataList[dayKey];
+        const day = buildDailyList(dayData ? [{ ...dayData, timestamp: dayKey }] : [], 1, dayKey)[0];
+        const toPing = (value) => (day.up > 0 && Number.isFinite(Number(value)) ? Math.round(Number(value)) : null);
+
+        let hourly = null;
+        if (hasHourlyData(dayKey, todayKey)) {
+            hourly = buildHourlyList((key) => uptimeCalculator.hourlyUptimeDataList[key], dayKey);
+        }
+
+        // Status changes are deleted together with the heartbeats after the retention period
+        let keepDays = parseInt(await Settings.get("keepDataPeriodDays"), 10);
+        if (!Number.isFinite(keepDays)) {
+            keepDays = DEFAULT_KEEP_PERIOD;
+        }
+
+        const dayStart = dayKey * 1000;
+        const dayEnd = dayStart + 86400 * 1000;
+        const nowMs = now.valueOf();
+
+        let periods = null;
+        if (keepDays < 1 || dayStart >= nowMs - keepDays * 86400 * 1000) {
+            const toBeat = (row) => ({ status: Number(row.status), time: heartbeatTimeToMs(row.time) });
+            const from = R.isoDateTimeMillis(dayjs.utc(dayStart));
+            const to = R.isoDateTimeMillis(dayjs.utc(dayEnd));
+
+            const previous = await R.getRow(
+                `
+                    SELECT status, time FROM heartbeat
+                    WHERE monitor_id = ? AND important = 1 AND time < ?
+                    ORDER BY time DESC
+                    LIMIT 1
+                `,
+                [monitorID, from]
+            );
+            const beats = await R.getAll(
+                `
+                    SELECT status, time FROM heartbeat
+                    WHERE monitor_id = ? AND important = 1 AND time >= ? AND time < ?
+                    ORDER BY time
+                `,
+                [monitorID, from, to]
+            );
+
+            periods = buildPeriods(previous ? toBeat(previous) : null, beats.map(toBeat), dayStart, dayEnd, nowMs);
+        }
+
+        response.json({
+            ok: true,
+            date: day.date,
+            summary: {
+                status: day.status,
+                uptime: day.uptime,
+                up: day.up,
+                down: day.down,
+                maintenance: day.maintenance,
+                avgPing: day.ping,
+                minPing: toPing(dayData?.minPing),
+                maxPing: toPing(dayData?.maxPing),
+            },
+            hourly,
+            periods,
+            hourlyDays: HOURLY_DAYS,
+            keepDays,
+        });
+    } catch (error) {
+        sendHttpError(response, error.message);
+    }
+});
+
+// Status page's manifest.json
 router.get("/api/status-page/:slug/manifest.json", cache("1440 minutes"), async (request, response) => {
     allowDevAllOrigin(response);
     let slug = request.params.slug;

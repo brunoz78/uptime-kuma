@@ -1,6 +1,16 @@
 const { describe, test } = require("node:test");
 const assert = require("node:assert");
-const { normalizeDailyViewDays, classifyDay, buildDailyList, periodUptime } = require("../../server/daily-view");
+const {
+    normalizeDailyViewDays,
+    classifyDay,
+    buildDailyList,
+    periodUptime,
+    parseDayKey,
+    hasHourlyData,
+    buildHourlyList,
+    heartbeatTimeToMs,
+    buildPeriods,
+} = require("../../server/daily-view");
 const { UptimeCalculator } = require("../../server/uptime-calculator");
 
 const DAY = 86400;
@@ -126,5 +136,129 @@ describe("Daily view", () => {
         await assert.rejects(UptimeCalculator.getUptimeCalculator(monitorID), /database not ready/);
         fail = false;
         assert.ok(await UptimeCalculator.getUptimeCalculator(monitorID));
+    });
+
+    test("parseDayKey() accepts only real dates inside the view", () => {
+        assert.strictEqual(parseDayKey("2026-11-15", TODAY, 90), TODAY);
+        assert.strictEqual(parseDayKey("2026-11-14", TODAY, 90), TODAY - DAY);
+        assert.strictEqual(parseDayKey("2026-08-18", TODAY, 90), TODAY - 89 * DAY);
+        assert.strictEqual(parseDayKey("2026-08-17", TODAY, 90), null);
+        assert.strictEqual(parseDayKey("2026-11-16", TODAY, 90), null);
+        assert.strictEqual(parseDayKey("2026-02-30", TODAY, 365), null);
+        assert.strictEqual(parseDayKey("2026-11-15T00:00:00Z", TODAY, 90), null);
+        assert.strictEqual(parseDayKey("15.11.2026", TODAY, 90), null);
+        assert.strictEqual(parseDayKey(undefined, TODAY, 90), null);
+    });
+
+    test("hasHourlyData() covers the last 30 days", () => {
+        assert.strictEqual(hasHourlyData(TODAY, TODAY), true);
+        assert.strictEqual(hasHourlyData(TODAY - 29 * DAY, TODAY), true);
+        assert.strictEqual(hasHourlyData(TODAY - 30 * DAY, TODAY), false);
+    });
+
+    test("buildHourlyList() returns 24 hours with status and uptime", () => {
+        const hours = {
+            [TODAY + 2 * 3600]: { up: 50, down: 10 },
+            [TODAY + 3 * 3600]: { up: 60, down: 0 },
+        };
+        const list = buildHourlyList((key) => hours[key], TODAY);
+
+        assert.strictEqual(list.length, 24);
+        assert.strictEqual(list[0].start, TODAY);
+        assert.strictEqual(list[23].start, TODAY + 23 * 3600);
+        assert.strictEqual(list[0].status, "missing");
+        assert.strictEqual(list[2].status, "down");
+        assert.strictEqual(list[2].uptime, 0.8333);
+        assert.strictEqual(list[3].status, "up");
+    });
+
+    test("heartbeatTimeToMs() reads database times as UTC", () => {
+        assert.strictEqual(heartbeatTimeToMs("2026-11-15 02:14:00.000"), Date.UTC(2026, 10, 15, 2, 14));
+        assert.strictEqual(heartbeatTimeToMs("2026-11-15T02:14:00Z"), Date.UTC(2026, 10, 15, 2, 14));
+        assert.strictEqual(heartbeatTimeToMs(new Date(Date.UTC(2026, 10, 15))), Date.UTC(2026, 10, 15));
+        assert.ok(Number.isNaN(heartbeatTimeToMs(null)));
+    });
+
+    describe("buildPeriods()", () => {
+        const start = TODAY * 1000;
+        const end = start + DAY * 1000;
+        const at = (h, m = 0) => start + (h * 60 + m) * 60 * 1000;
+        const tomorrow = end + 1000;
+
+        test("an outage inside the day", () => {
+            const periods = buildPeriods(
+                { status: 1 },
+                [
+                    { status: 0, time: at(2, 14) },
+                    { status: 1, time: at(2, 31) },
+                ],
+                start,
+                end,
+                tomorrow
+            );
+            assert.deepStrictEqual(periods, [
+                {
+                    type: "down",
+                    start: at(2, 14),
+                    end: at(2, 31),
+                    startsBefore: false,
+                    endsAfter: false,
+                    ongoing: false,
+                },
+            ]);
+        });
+
+        test("an outage from the day before that goes on into the next day", () => {
+            const periods = buildPeriods({ status: 0 }, [], start, end, tomorrow);
+            assert.deepStrictEqual(periods, [
+                { type: "down", start, end, startsBefore: true, endsAfter: true, ongoing: false },
+            ]);
+        });
+
+        test("an outage that is still going on today", () => {
+            const now = at(10);
+            const periods = buildPeriods({ status: 1 }, [{ status: 0, time: at(9) }], start, end, now);
+            assert.deepStrictEqual(periods, [
+                { type: "down", start: at(9), end: now, startsBefore: false, endsAfter: false, ongoing: true },
+            ]);
+        });
+
+        test("maintenance followed by an outage, repeated DOWN beats merged", () => {
+            const periods = buildPeriods(
+                { status: 1 },
+                [
+                    { status: 3, time: at(1) },
+                    { status: 0, time: at(2) },
+                    { status: 0, time: at(2, 30) },
+                    { status: 1, time: at(3) },
+                ],
+                start,
+                end,
+                tomorrow
+            );
+            assert.deepStrictEqual(
+                periods.map((p) => [p.type, p.start, p.end]),
+                [
+                    ["maintenance", at(1), at(2)],
+                    ["down", at(2), at(3)],
+                ]
+            );
+        });
+
+        test("no previous beat, beats outside the day and PENDING are ignored", () => {
+            const periods = buildPeriods(
+                null,
+                [
+                    { status: 0, time: start - 1000 },
+                    { status: 2, time: at(4) },
+                    { status: 1, time: at(5) },
+                    { status: 0, time: end + 1000 },
+                ],
+                start,
+                end,
+                end + 5000
+            );
+            assert.deepStrictEqual(periods, []);
+        });
     });
 });

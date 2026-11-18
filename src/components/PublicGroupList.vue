@@ -125,6 +125,7 @@
                                                 v-if="dailyViewDays > 0"
                                                 :monitor-id="monitor.element.id"
                                                 :days="dailyViewDays"
+                                                @select="(day) => $refs.dailyDetailDialog.show(monitor.element, day)"
                                             />
                                             <HeartbeatBar v-else size="mid" :monitor-id="monitor.element.id" />
                                         </div>
@@ -138,10 +139,12 @@
         </template>
     </Draggable>
     <MonitorSettingDialog ref="monitorSettingDialog" />
+    <DailyDetailDialog v-if="dailyViewDays > 0" ref="dailyDetailDialog" :slug="slug" />
 </template>
 
 <script>
 import MonitorSettingDialog from "./MonitorSettingDialog.vue";
+import DailyDetailDialog from "./DailyDetailDialog.vue";
 import Draggable from "vuedraggable";
 import HeartbeatBar from "./HeartbeatBar.vue";
 import DailyHeartbeatBar from "./DailyHeartbeatBar.vue";
@@ -152,6 +155,7 @@ import Status from "./Status.vue";
 export default {
     components: {
         MonitorSettingDialog,
+        DailyDetailDialog,
         Draggable,
         HeartbeatBar,
         DailyHeartbeatBar,
@@ -181,6 +185,11 @@ export default {
         dailyViewDays: {
             type: Number,
             default: 0,
+        },
+        /** Slug of the status page, used to load the details of a day */
+        slug: {
+            type: String,
+            default: null,
         },
     },
     data() {
