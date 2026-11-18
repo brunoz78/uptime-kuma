@@ -7,13 +7,70 @@
 Uptime Kuma is an easy-to-use self-hosted monitoring tool.
 
 > [!NOTE]
-> **This fork adds a daily view to status pages.** Edit a status page and set "Daily View" to 90, 180 or 365 days:
-> each monitor then shows one bar per day (green: no failed check, orange: at least 95 % uptime, red: below,
-> blue: maintenance, grey: no data) instead of the latest heartbeats.
->
-> The image `ghcr.io/brunoz78/uptime-kuma` is the official image of the same version with this change on top.
-> Use it in place of `louislam/uptime-kuma`, the data volume stays the same. Everything else in this file
-> describes the original project.
+> **Dies ist ein Fork von [louislam/uptime-kuma](https://github.com/louislam/uptime-kuma) mit einer Tagesansicht für Statusseiten.**
+> Die Änderungen sind unten im Abschnitt [Änderungen gegenüber dem Original](#änderungen-gegenüber-dem-original) beschrieben.
+> Alles andere in dieser Datei beschreibt das Originalprojekt.
+
+## Änderungen gegenüber dem Original
+
+### Tagesansicht auf Statusseiten
+
+Im Original zeigt eine Statusseite pro Monitor nur die letzten 100 Checks. In diesem Fork lässt sich pro Statusseite
+eine **Tagesansicht** einschalten: Jeder Monitor zeigt dann einen Balken pro Kalendertag.
+
+- **Einstellung:** Statusseite bearbeiten → «Tagesansicht» → Aus, 90, 180 oder 365 Tage.
+- **Farben:**
+
+  | Farbe  | Bedeutung                                  |
+  | ------ | ------------------------------------------ |
+  | Grün   | kein fehlgeschlagener Check an dem Tag     |
+  | Orange | Fehlschläge, Verfügbarkeit mindestens 95 % |
+  | Rot    | Verfügbarkeit unter 95 %                   |
+  | Blau   | Wartung, ohne fehlgeschlagenen Check       |
+  | Grau   | keine Daten                                |
+
+- **Tooltip:** Datum, Status, Verfügbarkeit und durchschnittliche Antwortzeit des Tages.
+- **Prozentzahl** neben dem Monitor: Verfügbarkeit über den gewählten Zeitraum statt über 24 Stunden.
+- **Tagesgrenze:** Ein Tag ist ein UTC-Tag, weil Uptime Kuma die Tagesstatistik so speichert.
+- **Daten:** Die Werte stammen aus der vorhandenen Tagesstatistik (`stat_daily`). Die Ansicht funktioniert mit SQLite
+  und MariaDB und zeigt sofort die Vergangenheit, soweit Statistik vorhanden ist (höchstens 365 Tage).
+- **Auf schmalen Bildschirmen** werden die ältesten Tage ausgeblendet.
+- **Sprachen:** Deutsch und Englisch.
+
+### Fehlerbehebung
+
+- Kurz nach einem Neustart konnten gleichzeitige Anfragen eine noch nicht geladene Uptime-Statistik erhalten, sodass
+  ein Monitor bis zu fünf Minuten ohne Daten erschien. Die Statistik wird jetzt einmal geladen, und alle Anfragen
+  warten darauf.
+
+### Technisch
+
+| Bereich    | Änderung                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------- |
+| Datenbank  | neue Spalte `status_page.daily_view_days` (Migration `2026-11-15-0000-status-page-daily-view`) |
+| Server     | `server/daily-view.js`, Endpunkt `GET /api/status-page/heartbeat-daily/:slug`                  |
+| Oberfläche | `src/components/DailyHeartbeatBar.vue`, Einstellung in `src/pages/StatusPage.vue`              |
+| Tests      | `test/backend-test/test-daily-view.js`                                                         |
+| Workflows  | die Workflows des Originals sind entfernt, siehe unten                                         |
+
+Bei «Tagesansicht: Aus» verhält sich alles wie im Original. Ein Wechsel zurück zum offiziellen Image ist jederzeit
+möglich; die zusätzliche Spalte stört dort nicht.
+
+### Docker-Image
+
+`ghcr.io/brunoz78/uptime-kuma` ist das offizielle Image derselben Version mit diesen Änderungen darüber
+(amd64 und arm64). Es ersetzt `louislam/uptime-kuma`, das Daten-Volume bleibt dasselbe.
+
+| Tag                      | Inhalt                                     |
+| ------------------------ | ------------------------------------------ |
+| `<version>-tagesansicht` | feste Version, z. B. `2.5.12-tagesansicht` |
+| `latest`                 | neueste gebaute Version                    |
+
+### Automatischer Abgleich mit dem Original
+
+Der Workflow «Sync upstream» prüft täglich, ob es ein neues stabiles Release derselben Hauptversion gibt. Wenn ja,
+übernimmt er es, testet und baut es und veröffentlicht ein neues Image. Bei Konflikten bricht er ab, ohne etwas zu
+ändern. Eine neue Hauptversion (z. B. 3.x) wird nur von Hand übernommen.
 
 <a target="_blank" href="https://github.com/louislam/uptime-kuma"><img src="https://img.shields.io/github/stars/louislam/uptime-kuma?style=flat" /></a> <a target="_blank" href="https://hub.docker.com/r/louislam/uptime-kuma"><img src="https://img.shields.io/docker/pulls/louislam/uptime-kuma" /></a> <a target="_blank" href="https://hub.docker.com/r/louislam/uptime-kuma"><img src="https://img.shields.io/docker/v/louislam/uptime-kuma/2?label=docker%20image%20ver." /></a> <a target="_blank" href="https://github.com/louislam/uptime-kuma"><img src="https://img.shields.io/github/last-commit/louislam/uptime-kuma" /></a> <a target="_blank" href="https://opencollective.com/uptime-kuma"><img src="https://opencollective.com/uptime-kuma/total/badge.svg?label=Open%20Collective%20Backers&color=brightgreen" /></a>
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/louislam?label=GitHub%20Sponsors)](https://github.com/sponsors/louislam) <a href="https://weblate.kuma.pet/projects/uptime-kuma/uptime-kuma/">
