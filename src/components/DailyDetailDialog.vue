@@ -1,7 +1,13 @@
 <template>
     <!-- Rendered at the end of <body>, so no parent element can cover the dialog -->
     <Teleport to="body">
-        <div ref="modal" class="modal fade" tabindex="-1" data-testid="daily-detail-dialog">
+        <div
+            ref="modal"
+            class="modal fade daily-detail-modal"
+            tabindex="-1"
+            data-testid="daily-detail-dialog"
+            @mousedown.self="modal.hide()"
+        >
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
@@ -169,7 +175,9 @@ export default {
         },
     },
     mounted() {
-        this.modal = new Modal(this.$refs.modal);
+        // Own light background instead of the dark, blurred one, so the status page stays readable.
+        // Without the Bootstrap backdrop a click next to the dialog is handled by @mousedown.self.
+        this.modal = new Modal(this.$refs.modal, { backdrop: false });
     },
     beforeUnmount() {
         this.modal?.dispose();
@@ -272,6 +280,15 @@ export default {
 
 <style lang="scss" scoped>
 @import "../assets/vars.scss";
+
+.daily-detail-modal {
+    backdrop-filter: none;
+    background-color: rgba(0, 0, 0, 0.25);
+
+    .dark & {
+        background-color: rgba(0, 0, 0, 0.45);
+    }
+}
 
 .status-pill {
     display: inline-block;
